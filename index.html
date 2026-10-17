@@ -130,10 +130,35 @@ svg.ch{touch-action:pan-y;cursor:crosshair}
  h1{font-size:22px}.cards{grid-template-columns:1fr}.num{font-size:26px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.enter .ln{stroke-dasharray:none;stroke-dashoffset:0}}
+[hidden]{display:none!important}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.gbtn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:12px;min-height:40px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--ink);font:700 13.5px "Manrope",system-ui,sans-serif;cursor:pointer;transition:transform .15s,border-color .2s}
+.gbtn:hover{border-color:var(--accent)}.gbtn:active{transform:scale(.97)}
+.auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.acard{width:100%;max-width:360px;background:var(--shell);border-radius:24px;padding:26px 24px;box-shadow:0 20px 50px rgba(10,20,80,.3);animation:rise .5s backwards}
+.acard h1{font-size:24px;margin:0 0 4px}.acard .s{color:var(--muted);margin:0 0 18px}
+.acard input{margin-bottom:12px}
+.amsg{min-height:18px;font-size:12.5px;color:var(--danger);margin-top:10px}
+.alink{background:none;border:0;color:var(--accent);font:600 13px "Manrope",system-ui,sans-serif;cursor:pointer;margin-top:10px;width:100%;padding:6px}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
 </head>
 <body>
-<div class="shell">
+<div class="auth" id="auth" hidden>
+  <form class="acard" id="af">
+    <h1 id="at">Iniciar sesión</h1>
+    <p class="s">Entra para guardar tu progreso en la nube.</p>
+    <label for="ae">Correo</label><input id="ae" type="email" autocomplete="email" required>
+    <label for="ap">Contraseña</label><input id="ap" type="password" minlength="6" autocomplete="current-password" required>
+    <button class="btn" id="ab" type="submit">Iniciar sesión</button>
+    <div class="or"><span>o</span></div>
+    <button class="gbtn" id="ag" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continuar con Google</button>
+    <div class="amsg" id="am" role="alert"></div>
+    <button class="alink" id="as" type="button">¿No tienes cuenta? Crear cuenta</button>
+  </form>
+</div>
+<div class="shell" hidden>
   <nav class="side" aria-label="Navegación">
     <div class="logo"><svg viewBox="0 0 48 24"><path d="M4 14C10 3 18 4 24 12s14 8 20-2"/></svg></div>
     <button class="nav" data-tab="panel"><svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Panel</button>
@@ -143,6 +168,7 @@ svg.ch{touch-action:pan-y;cursor:crosshair}
   <main class="main">
     <div class="top"><h1 id="title">Panel</h1>
       <div class="pill">
+        <button id="out" aria-label="Cerrar sesión" title="Cerrar sesión"><svg class="i" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
         <button id="theme" aria-label="Cambiar tema"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
         <button class="add" id="quick" aria-label="Añadir ejercicio"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       </div></div>
@@ -153,7 +179,17 @@ svg.ch{touch-action:pan-y;cursor:crosshair}
 const KEY="fit-tracker-v1";
 let S={workouts:[],weights:[],goal:null},tab="panel";
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+/* ===== Supabase ===== */
+const SUPABASE_URL="https://asutlwblgwhmfwrsdepb.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdXRsd2JsZ3dobWZ3cnNkZXBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxNTAyNzgsImV4cCI6MjA3NTcyNjI3OH0.g0av0iE1Ki-PczknxCOP0UHUK_fn2tRawKiLeZD2Oew";
+let sb=null,user=null,timer;
+try{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY)}catch(e){}
+const EMPTY=()=>({workouts:[],weights:[],goal:null});
+const save=()=>{
+  if(!user||!sb)return;
+  clearTimeout(timer);
+  timer=setTimeout(()=>sb.from("fitness_data").upsert({user_id:user.id,data:S,updated_at:new Date().toISOString()}).then(r=>{if(r.error)console.error(r.error)}),500);
+};
 const $=s=>document.querySelector(s);
 const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
@@ -307,7 +343,50 @@ $("#app").addEventListener("click",e=>{
   if(row){row.style.opacity=0;row.style.transform="translateX(18px)"}
   setTimeout(()=>{S[k]=S[k].filter(x=>x.id!==b.dataset.del);save();render();},row?190:0);
 });
-render(true);
+/* ===== Sesión ===== */
+let mode="in";
+const msg=t=>{$("#am").textContent=t};
+const em=m=>/invalid login/i.test(m)?"Correo o contraseña incorrectos.":/already registered/i.test(m)?"Ese correo ya tiene cuenta. Inicia sesión.":/at least 6/i.test(m)?"La contraseña debe tener al menos 6 caracteres.":/provider is not enabled/i.test(m)?"Google aún no está activado en Supabase.":m;
+function setMode(m){mode=m;const a=m==="in";
+  $("#at").textContent=a?"Iniciar sesión":"Crear cuenta";
+  $("#ab").textContent=a?"Iniciar sesión":"Crear cuenta";
+  $("#as").textContent=a?"¿No tienes cuenta? Crear cuenta":"¿Ya tienes cuenta? Iniciar sesión";
+  $("#ap").autocomplete=a?"current-password":"new-password";msg("")}
+async function enter(u){
+  const r=await sb.from("fitness_data").select("data").eq("user_id",u.id).maybeSingle();
+  if(r.error){$("#auth").hidden=false;$(".shell").hidden=true;msg("No se pudieron cargar tus datos: "+r.error.message);return}
+  user=u;
+  if(r.data&&r.data.data)S=Object.assign(EMPTY(),r.data.data);
+  else{save();try{localStorage.removeItem(KEY)}catch(e){}}
+  $("#auth").hidden=true;$(".shell").hidden=false;tab="panel";render(true);
+}
+$("#as").onclick=()=>setMode(mode==="in"?"up":"in");
+$("#af").onsubmit=async e=>{
+  e.preventDefault();msg("");
+  if(!sb)return msg("Falta configurar SUPABASE_URL y SUPABASE_KEY en el código.");
+  const email=$("#ae").value.trim(),password=$("#ap").value;
+  $("#ab").disabled=true;
+  const r=mode==="in"?await sb.auth.signInWithPassword({email,password}):await sb.auth.signUp({email,password});
+  $("#ab").disabled=false;
+  if(r.error)return msg(em(r.error.message));
+  if(!r.data.session)return msg("Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.");
+  enter(r.data.user);
+};
+$("#ag").onclick=async()=>{
+  msg("");
+  if(!sb)return msg("Falta configurar SUPABASE_URL y SUPABASE_KEY en el código.");
+  const r=await sb.auth.signInWithOAuth({provider:"google",options:{redirectTo:location.origin}});
+  if(r.error)msg(em(r.error.message));
+};
+$("#out").onclick=async()=>{
+  await sb.auth.signOut();user=null;S=EMPTY();
+  $(".shell").hidden=true;$("#auth").hidden=false;$("#ap").value="";setMode("in");
+};
+(async()=>{
+  if(!sb){$("#auth").hidden=false;msg("Falta configurar SUPABASE_URL y SUPABASE_KEY en el código.");return}
+  const {data}=await sb.auth.getSession();
+  if(data.session)enter(data.session.user);else $("#auth").hidden=false;
+})();
 </script>
 </body>
 </html>
