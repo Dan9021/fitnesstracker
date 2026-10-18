@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fitness Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1456ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fitness">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;
@@ -200,6 +205,16 @@ svg.sp{display:block;width:100%;height:auto}
 .pad button:hover{background:var(--card)}.pad button:active{transform:scale(.92)}
 .shake{animation:shake .4s}
 @keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+/* ===== rutinas, descanso, actividad, logros ===== */
+.rest{position:fixed;right:22px;bottom:22px;z-index:90;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 18px;border-radius:99px;background:var(--ink);color:var(--panel);box-shadow:0 12px 30px rgba(10,20,80,.3);animation:rise .35s backwards}
+.rest .lb{color:inherit;opacity:.7;margin:0}.rest b{font-size:20px;font-variant-numeric:tabular-nums;min-width:48px;text-align:center}
+.rest button{border:0;border-radius:99px;background:color-mix(in srgb,var(--panel) 18%,transparent);color:inherit;font:700 13px "Manrope",system-ui,sans-serif;padding:6px 12px;cursor:pointer}
+.hm{display:grid;grid-template-rows:repeat(7,1fr);grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;margin-top:4px}
+.hc{aspect-ratio:1;border-radius:4px;background:var(--line);transition:transform .15s}.hc:hover{transform:scale(1.25)}
+.hc.l1{background:color-mix(in srgb,var(--accent) 35%,var(--card))}.hc.l2{background:color-mix(in srgb,var(--accent) 65%,var(--card))}.hc.l3{background:var(--accent)}.hc.lx{opacity:0}
+.bds{display:flex;flex-wrap:wrap;gap:8px}.bd{padding:6px 12px;border-radius:99px;background:var(--panel);color:var(--muted);font-weight:700;font-size:12.5px}.bd.on{background:var(--accent);color:var(--accent-ink)}
+.sm{width:auto!important;margin:0!important;padding:0 14px}
+@media (max-width:860px){.rest{left:14px;right:14px;bottom:calc(88px + env(safe-area-inset-bottom,0px));justify-content:center}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
 </head>
@@ -239,6 +254,7 @@ svg.sp{display:block;width:100%;height:auto}
     <div id="app"></div>
   </main>
 </div>
+<div class="rest" id="rest" hidden><span class="lb">Descanso</span><b id="rtime">1:30</b><button id="rplus" type="button">+15 s</button><button id="rskip" type="button" aria-label="Cerrar">×</button></div>
 <div class="lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="ptitle">
   <div class="pcard" id="pcard">
     <div class="alogo"><svg viewBox="0 0 48 24"><path d="M4 14C10 3 18 4 24 12s14 8 20-2"/></svg></div>
@@ -344,6 +360,7 @@ function ajustes(){
     <button class="btn" type="submit">Guardar nombre</button><div class="amsg" id="nmsg" role="status"></div></form></div>
   <div class="c"><h2>Objetivo y apariencia</h2>
     <label for="wgi">Entrenos por semana</label><input id="wgi" type="number" min="1" max="14" inputmode="numeric" value="${S.wg||4}">
+    <label for="rsi" style="margin-top:14px">Descanso entre series (segundos)</label><input id="rsi" type="number" min="15" max="600" step="15" inputmode="numeric" value="${S.rest||90}">
     <label style="margin-top:14px">Color de la app</label>
     <div class="sw">${PALS.map(n=>`<button class="swb${n===cp?" on":""}" data-p="${n}" style="--c:${cols[n]}" aria-label="${n}" title="${n}"></button>`).join("")}</div></div>
   <div class="c"><h2>Seguridad</h2>
@@ -356,7 +373,8 @@ function ajustes(){
   <div class="c"><h2>Tus datos</h2>
     <button class="btn ghost" id="exd" type="button" style="margin-top:0">Exportar mis datos (JSON)</button>
     <button class="btn danger" id="rsd" type="button">Borrar todos mis entrenos y pesos</button>
-    <button class="btn" id="out2" type="button">Cerrar sesión</button></div>`;
+    <button class="btn" id="out2" type="button">Cerrar sesión</button></div>
+  <p class="nsub" style="text-align:center">Versión 18 oct · rutinas, descanso y logros</p>`;
 }
 function bindSettings(){
   const say=(id,t,bad)=>{const e=$(id);e.textContent=t;e.className="amsg"+(bad?"":" ok")};
@@ -386,6 +404,7 @@ function bindSettings(){
     const r=await sb.auth.updateUser({data:{photo:""}});if(r.error)return say("#phmsg",r.error.message,1);
     user=r.data.user;$("#av").innerHTML=avHtml();render();say("#phmsg","Foto eliminada.");
   };
+  $("#rsi").onchange=e=>{S.rest=Math.max(15,Math.min(600,parseInt(e.target.value)||90));e.target.value=S.rest;save()};
   $("#wgi").onchange=e=>{const n=Math.max(1,Math.min(14,parseInt(e.target.value)||4));S.wg=n;e.target.value=n;save()};
   document.querySelectorAll(".swb").forEach(b=>b.onclick=()=>{setPal(b.dataset.p);document.querySelectorAll(".swb").forEach(x=>x.classList.toggle("on",x===b))});
   $("#pf").onsubmit=async e=>{e.preventDefault();
@@ -467,6 +486,35 @@ async function resume(){
 document.addEventListener("visibilitychange",()=>{if(document.hidden)hiddenAt=Date.now();else resume()});
 addEventListener("blur",()=>{hiddenAt=Date.now()});
 addEventListener("focus",resume);
+function heat(){
+  const cnt={};S.workouts.forEach(w=>cnt[w.date]=(cnt[w.date]||0)+1);
+  const f=x=>new Date(x-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),d=new Date(),t=today();
+  d.setDate(d.getDate()-((d.getDay()+6)%7)-13*7);
+  let h="";
+  for(let i=0;i<98;i++){const k=f(d),n=cnt[k]||0;
+    h+=`<i class="hc l${k>t?"x":n>=6?3:n>=3?2:n>=1?1:0}" title="${fmtS(k)}${n?" · "+n+(n===1?" ejercicio":" ejercicios"):""}"></i>`;d.setDate(d.getDate()+1)}
+  return `<div class="c"><span class="lb">Actividad · 14 semanas</span><div class="hm">${h}</div></div>`;
+}
+function badges(){
+  const days=new Set(S.workouts.map(w=>w.date)).size,sets=S.workouts.reduce((a,w)=>a+w.sets,0),seen={};let pr=false;
+  [...S.workouts].sort((a,b)=>a.date<b.date?-1:1).forEach(w=>{if(seen[w.ex]!==undefined&&w.kg>seen[w.ex])pr=true;seen[w.ex]=Math.max(seen[w.ex]||0,w.kg)});
+  const L=[["Primer entreno",days>=1],["10 días entrenados",days>=10],["Racha de 7 días",streak()>=7],["Primer récord",pr],["100 series",sets>=100],["5 pesajes",S.weights.length>=5]];
+  return `<div class="c"><span class="lb">Logros · ${L.filter(x=>x[1]).length}/${L.length}</span><div class="bds">${L.map(([n,o])=>`<span class="bd${o?" on":""}">${o?"✓ ":""}${n}</span>`).join("")}</div></div>`;
+}
+function routines(){
+  const R=S.routines||[],has=S.workouts.some(w=>w.date===today());
+  return `<div class="c"><div class="hd"><h2 style="margin:0">Rutinas</h2>${has?'<button class="btn ghost sm" data-rt="save" type="button">Guardar hoy</button>':""}</div>
+  ${R.length?R.map(r=>`<div class="row"><div class="t"><b>${esc(r.name)}</b><span>${r.items.length} ${r.items.length===1?"ejercicio":"ejercicios"}</span></div><button class="btn sm" data-rt="go" data-id="${r.id}" type="button">Hacer hoy</button><button class="x" data-rt="del" data-id="${r.id}" aria-label="Eliminar rutina">×</button></div>`).join(""):`<p style="margin:0">Registra ejercicios hoy y pulsa “Guardar hoy” para crear tu primera rutina.</p>`}</div>`;
+}
+let rT=null,rEnd=0;
+function startRest(sec){rEnd=Date.now()+(sec||S.rest||90)*1000;$("#rest").hidden=false;clearInterval(rT);rT=setInterval(tickRest,250);tickRest()}
+function tickRest(){
+  const l=Math.ceil((rEnd-Date.now())/1000);
+  if(l<=0){clearInterval(rT);$("#rtime").textContent="¡Listo!";
+    try{navigator.vibrate&&navigator.vibrate([200,100,200]);const a=new(window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator();o.connect(a.destination);o.frequency.value=880;o.start();o.stop(a.currentTime+.25)}catch(e){}
+    setTimeout(()=>{if(Date.now()>=rEnd)$("#rest").hidden=true},3500);return}
+  $("#rtime").textContent=Math.floor(l/60)+":"+String(l%60).padStart(2,"0");
+}
 function panel(){
   const wg=S.wg||4,t=today(),tw=S.workouts.filter(w=>w.date===t);
   const last=[...S.workouts].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).pop();
@@ -481,6 +529,7 @@ function panel(){
   </div>
   <div class="c rk"><svg width="84" height="84" viewBox="0 0 84 84" role="img" aria-label="${days} de ${wg} entrenos"><circle class="rg" cx="42" cy="42" r="34"/><circle class="rp" cx="42" cy="42" r="34" style="--o:${(213.6*(1-Math.min(days/wg,1))).toFixed(1)}"/><text class="rt" x="42" y="47" text-anchor="middle">${days}/${wg}</text></svg>
     <div><span class="lb">Objetivo semanal</span><b class="big">${days>=wg?"¡Objetivo cumplido!":"Te faltan "+(wg-days)+(wg-days===1?" entreno":" entrenos")}</b><p>Racha: ${streak()} ${streak()===1?"día":"días"} seguidos</p></div></div>
+  ${heat()}${badges()}
   <div class="c"><div class="hd"><div><span class="lb">Peso actual</span><b class="num">${lw?fmtN(lw.kg):"–"}<small> kg</small></b></div>
     <p style="margin:0">${s.length>1?`Cambio total: ${ch>0?"+":""}${fmtN(ch)} kg`:"Registra tu peso en la pestaña Peso."}</p></div>${chart()}</div>`;
 }
@@ -497,7 +546,7 @@ function gym(){
     <div class="f q"><label for="re">Reps</label><input id="re" type="number" min="1" inputmode="numeric" value="10" required></div>
     <div class="f q"><label for="kg">Peso (kg)</label><input id="kg" type="number" min="0" step="0.5" inputmode="decimal" value="0" required></div>
     <div class="f w"><label for="gd">Fecha</label><input id="gd" type="date" value="${today()}" required></div>
-  </div><button class="btn" type="submit">Añadir ejercicio</button></form>${prog(names,mx)}${list}`;
+  </div><button class="btn" type="submit">Añadir ejercicio</button></form>${routines()}${prog(names,mx)}${list}`;
 }
 
 let CP=[];
@@ -590,7 +639,7 @@ function render(anim){
     gf.onsubmit=e=>{e.preventDefault();
       const nx=$("#ex").value.trim(),nk=+$("#kg").value,pm=Math.max(0,...S.workouts.filter(w=>w.ex.toLowerCase()===nx.toLowerCase()).map(w=>w.kg));
       S.workouts.push({id:uid(),date:$("#gd").value,ex:nx,sets:+$("#se").value,reps:+$("#re").value,kg:nk});
-      save();render();if(pm>0&&nk>pm)confetti();};
+      save();render();if(pm>0&&nk>pm)confetti();startRest();};
     $("#ex").onchange=e=>{const n=e.target.value.trim().toLowerCase();
       const l=[...S.workouts].reverse().find(w=>w.ex.toLowerCase()===n);
       if(l){$("#se").value=l.sets;$("#re").value=l.reps;$("#kg").value=l.kg;}};
@@ -689,6 +738,19 @@ $("#nmore").onclick=pickNote;
 $("#nclose").onclick=closeNote;
 $("#note").onclick=e=>{if(e.target.id==="note")closeNote()};
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#note").hidden)closeNote()});
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+$("#rplus").onclick=()=>{rEnd+=15000;tickRest()};
+$("#rskip").onclick=()=>{clearInterval(rT);$("#rest").hidden=true};
+$("#app").addEventListener("click",e=>{
+  const b=e.target.closest("[data-rt]");if(!b)return;
+  const R=S.routines=S.routines||[],t=today(),a=b.dataset.rt;
+  if(a==="save"){const n=(prompt("Nombre de la rutina:","")||"").trim();if(!n)return;
+    R.push({id:uid(),name:n.slice(0,30),items:S.workouts.filter(w=>w.date===t).map(w=>({ex:w.ex,sets:w.sets,reps:w.reps,kg:w.kg}))})}
+  else if(a==="del"){S.routines=R.filter(r=>r.id!==b.dataset.id)}
+  else{const r=R.find(r=>r.id===b.dataset.id);if(!r)return;
+    r.items.forEach(i=>{const l=[...S.workouts].reverse().find(w=>w.ex===i.ex);S.workouts.push({id:uid(),date:t,ex:i.ex,sets:i.sets,reps:i.reps,kg:l?l.kg:i.kg})});startRest()}
+  save();render();
+});
 $("#av").onclick=()=>{tab="ajustes";render(true)};
 $("#pal").onclick=()=>setPal(PALS[(PALS.indexOf(localStorage.getItem("fit-pal")||"azul")+1)%PALS.length]);
 try{setPal(localStorage.getItem("fit-pal")||"azul")}catch(e){}
