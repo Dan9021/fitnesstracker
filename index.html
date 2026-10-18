@@ -350,7 +350,7 @@ function ajustes(){
     <form id="pf"><label for="np">Nueva contraseña</label><input id="np" type="password" minlength="6" autocomplete="new-password" required>
     <button class="btn" type="submit">Cambiar contraseña</button><div class="amsg" id="pmsg" role="status"></div></form></div>
   <div class="c"><h2>Bloqueo con PIN</h2>
-    <p style="margin:0">${hasPin()?"La app está protegida con un PIN en este dispositivo.":"Protege la app con un PIN de 4 dígitos en este dispositivo."}</p>
+    <p style="margin:0">${hasPin()?"Tu cuenta está protegida con un PIN. Se pedirá en todos tus dispositivos.":"Protege tu cuenta con un PIN de 4 dígitos. Se pedirá en todos tus dispositivos."}</p>
     ${hasPin()?`<div class="phb" style="margin-top:12px"><button class="btn ghost" id="pinchg" type="button">Cambiar PIN</button><button class="btn ghost" id="pinoff" type="button">Quitar PIN</button></div><button class="btn" id="pinlock" type="button">Bloquear ahora</button>`:`<button class="btn" id="pinon" type="button">Activar PIN</button>`}
     <div class="amsg" id="pinmsg" role="status"></div></div>
   <div class="c"><h2>Tus datos</h2>
@@ -365,10 +365,10 @@ function bindSettings(){
     if(r.error)return say("#nmsg",r.error.message,1);
     user=r.data.user;$("#av").innerHTML=avHtml();render();say("#nmsg","Nombre actualizado.")};
   const bi=(id,f)=>{const e=$(id);if(e)e.onclick=f};
-  const pinRes=r=>{render();if(r===true)say("#pinmsg","Listo, PIN guardado.");else if(r==="mismatch")say("#pinmsg","Los dos PIN no coinciden. Inténtalo de nuevo.",1)};
+  const pinRes=r=>{render();if(r===true)say("#pinmsg","Listo, PIN guardado.");else if(r==="mismatch")say("#pinmsg","Los dos PIN no coinciden. Inténtalo de nuevo.",1);else if(r==="error")say("#pinmsg","No se pudo guardar el PIN. Inténtalo de nuevo.",1)};
   bi("#pinon",async()=>pinRes(await setPinFlow()));
-  bi("#pinchg",async()=>{if(!await verifyPin({cancel:true}))return;pinRes(await setPinFlow())});
-  bi("#pinoff",async()=>{if(!await verifyPin({cancel:true}))return;try{localStorage.removeItem(pk())}catch(e){}closePin();render();say("#pinmsg","PIN desactivado.")});
+  bi("#pinchg",async()=>{const old=await verifyPin({cancel:true});if(!old)return;pinRes(await setPinFlow(old))});
+  bi("#pinoff",async()=>{const old=await verifyPin({cancel:true});if(!old)return;const r=await sb.rpc("pin_remove",{p:old});closePin();if(!r.error&&r.data==="ok")pinOn=false;render();if(!r.error&&r.data==="ok")say("#pinmsg","PIN desactivado.");else say("#pinmsg","No se pudo quitar el PIN.",1)});
   bi("#pinlock",()=>lockNow());
   $("#phb").onclick=()=>$("#phf").click();
   $("#phf").onchange=async e=>{
@@ -398,15 +398,9 @@ function bindSettings(){
   $("#rsd").onclick=()=>{if(confirm("¿Borrar todos tus entrenos y pesos? No se puede deshacer.")){S=Object.assign(EMPTY(),{wg:S.wg});save();render()}};
   $("#out2").onclick=()=>$("#out").click();
 }
-/* ===== PIN (bloqueo local del dispositivo) ===== */
-const pk=()=>"fit-pin:"+user.id;
-const getPin=()=>{try{return localStorage.getItem(pk())}catch(e){return null}};
-const hasPin=()=>!!(user&&getPin());
-async function hashPin(p){
-  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(user.id+":"+p));
-  return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
-}
-let pbuf="",pres=null,fails=0,until=0,hiddenAt=0;
+/* ===== PIN de cuenta (se verifica en el servidor, vale en todos tus dispositivos) ===== */
+let pinOn=false,pbuf="",pres=null,hiddenAt=0;
+const hasPin=()=>!!(user&&pinOn);
 const dots=()=>document.querySelectorAll(".pdots i").forEach((d,i)=>d.classList.toggle("on",i<pbuf.length));
 function closePin(){$("#lock").hidden=true;$(".shell").inert=false;pres=null}
 function askPin(title,o={}){
@@ -423,22 +417,24 @@ function pinKey(k){
   if(pbuf.length===4){const r=pres,v=pbuf;pres=null;setTimeout(()=>r(v),120)}
 }
 async function verifyPin(o){
+  let msg="";
   for(;;){
-    const wait=until-Date.now();
-    const p=await askPin("Introduce tu PIN",{cancel:o.cancel,forgot:o.forgot,msg:wait>0?"Demasiados intentos. Espera "+Math.ceil(wait/1000)+" s.":(fails?"PIN incorrecto.":"")});
-    if(p===null)return false;
-    if(until>Date.now())continue;
-    if(await hashPin(p)===getPin()){fails=0;return true}
-    fails++;const c=$("#pcard");c.classList.remove("shake");void c.offsetWidth;c.classList.add("shake");
-    if(fails>=5){until=Date.now()+30000;fails=0}
+    const p=await askPin("Introduce tu PIN",{cancel:o.cancel,forgot:o.forgot,msg});
+    if(p===null)return "";
+    const r=await sb.rpc("pin_check",{p}),v=r.error?"error":r.data;
+    if(v==="ok"||v==="none"){if(v==="none")pinOn=false;return p}
+    const c=$("#pcard");c.classList.remove("shake");void c.offsetWidth;c.classList.add("shake");
+    msg=v==="bad"?"PIN incorrecto.":String(v).startsWith("locked:")?"Demasiados intentos. Espera "+String(v).slice(7)+" s.":"No se pudo comprobar el PIN. Revisa tu conexión.";
   }
 }
-async function setPinFlow(){
+async function setPinFlow(old){
   const a=await askPin("Crea un PIN de 4 dígitos",{cancel:true});if(a===null)return false;
   const b=await askPin("Repite el PIN",{cancel:true});if(b===null)return false;
   if(a!==b){closePin();return"mismatch"}
-  try{localStorage.setItem(pk(),await hashPin(a))}catch(e){}
-  closePin();return true;
+  const r=await sb.rpc("pin_set",{new_pin:a,old_pin:old||null});
+  closePin();
+  if(!r.error&&r.data==="ok"){pinOn=true;return true}
+  return"error";
 }
 async function lockNow(){
   if(!hasPin()||!$("#lock").hidden)return;
@@ -447,8 +443,9 @@ async function lockNow(){
 document.querySelectorAll(".pad button").forEach(b=>b.onclick=()=>pinKey(b.dataset.k));
 $("#pcancel").onclick=()=>{const r=pres;closePin();if(r)r(null)};
 $("#pforgot").onclick=()=>{
-  if(!confirm("Para restablecer el PIN tendrás que iniciar sesión de nuevo con tu cuenta. ¿Continuar?"))return;
-  const r=pres;try{localStorage.removeItem(pk())}catch(e){}closePin();if(r)r(null);$("#out").click();
+  if(!confirm("Para restablecer el PIN tendrás que volver a iniciar sesión con tu cuenta. ¿Continuar?"))return;
+  const r=pres;try{localStorage.setItem("fit-pinreset:"+user.id,"1")}catch(e){}
+  closePin();if(r)r(null);$("#out").click();
 };
 document.addEventListener("keydown",e=>{
   if($("#lock").hidden)return;
@@ -623,9 +620,16 @@ async function enter(u){
   user=u;
   if(r.data&&r.data.data)S=Object.assign(EMPTY(),r.data.data);
   else{save();try{localStorage.removeItem(KEY)}catch(e){}}
+  const ps=await sb.rpc("pin_status");
+  if(ps.error){user=null;$("#auth").hidden=false;$(".shell").hidden=true;msg("No se pudo comprobar el PIN: "+ps.error.message);return}
+  pinOn=ps.data===true;
+  let wasReset=false;const rk="fit-pinreset:"+u.id;
+  try{localStorage.removeItem("fit-pin:"+u.id);
+    if(pinOn&&localStorage.getItem(rk)){const rr=await sb.rpc("pin_reset");if(rr.data==="ok"){pinOn=false;wasReset=true}localStorage.removeItem(rk)}}catch(e){}
   $("#auth").hidden=true;$(".shell").hidden=false;tab="panel";render(true);
   const av=$("#av");av.hidden=false;av.innerHTML=avHtml();
   lockNow();
+  if(wasReset)setTimeout(()=>alert("Tu PIN se ha restablecido. Puedes crear uno nuevo en Ajustes → Bloqueo con PIN."),300);
 }
 $("#as").onclick=()=>setMode(mode==="in"?"up":"in");
 $("#af").onsubmit=async e=>{
