@@ -453,10 +453,20 @@ document.addEventListener("keydown",e=>{
   else if(e.key==="Backspace")pinKey("b");
   else if(e.key==="Escape"&&!$("#pcancel").hidden)$("#pcancel").click();
 });
-document.addEventListener("visibilitychange",()=>{
-  if(document.hidden)hiddenAt=Date.now();
-  else if(hasPin()&&Date.now()-hiddenAt>60000)lockNow();
-});
+/* al volver a la app, consulta el PIN en el servidor: si lo activaste en otro dispositivo, se bloquea aquí también */
+let lastRes=0;
+async function resume(){
+  if(!user||Date.now()-lastRes<4000)return;
+  lastRes=Date.now();
+  const away=Date.now()-hiddenAt,r=await sb.rpc("pin_status");
+  if(r.error||!user)return;
+  const was=pinOn;pinOn=r.data===true;
+  if(pinOn&&(!was||away>60000))lockNow();
+  if(tab==="ajustes"&&was!==pinOn)render();
+}
+document.addEventListener("visibilitychange",()=>{if(document.hidden)hiddenAt=Date.now();else resume()});
+addEventListener("blur",()=>{hiddenAt=Date.now()});
+addEventListener("focus",resume);
 function panel(){
   const wg=S.wg||4,t=today(),tw=S.workouts.filter(w=>w.date===t);
   const last=[...S.workouts].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).pop();
